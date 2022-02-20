@@ -33,14 +33,14 @@ def execute():
 
 def join(df_pentaho, df_from_sheet):
     #merge two DB, inner_right, df_from_sheet has priority
-    df_from_sheet = df_from_sheet[['-', 'ATCO', 'IND. OP.', 'HE (h:mm)']]
+    df_from_sheet = df_from_sheet[['-', 'ATCO', 'IND. OP.', 'HE (h)']]
     result = pd.merge(df_pentaho,
                           df_from_sheet,
                           on=['IND. OP.'],
                           how='right')
-    result = result[['-', 'ATCO', 'IND. OP.', 'HE (h:mm)', 'HL (h:mm)']]
-    result['HL (h:mm)'] = result[['HL (h:mm)']].fillna("00:00")
-    result['HE (h:mm)'] = result[['HE (h:mm)']].fillna("00:00")
+    result = result[['-', 'ATCO', 'IND. OP.', 'HE (h)', 'HL (h)']]
+    result['HL (h)'] = result[['HL (h)']].fillna("0")
+    result['HE (h)'] = result[['HE (h)']].fillna("0")
     return result
 
 #sum and add to the DF the total amount of hours of HE/HL and IDBR
@@ -51,16 +51,16 @@ def add_sum(df):
     totalammount_row = count_row-2
 
     #sum the HE column
-    df_he = df[['HE (h:mm)']].copy().astype(str)
-    df_he = df_he.applymap(lambda entry: make_delta(entry))
+    df_he = df[['HE (h)']].copy().astype(float)
     he_sum = df_he.sum()
     he_sum = he_sum[0]
 
     # sum the HL column
-    df_hl = df[['HL (h:mm)']].copy().astype(str)
-    df_hl = df_hl.applymap(lambda entry: make_delta(entry))
+    df_hl = df[['HL (h)']].copy().astype(float)
+    #df_hl = df_hl.applymap(lambda entry: make_delta(entry))
     hl_sum = df_hl.sum()
     hl_sum = hl_sum[0]
+    print(hl_sum)
 
     #calculate IDBR
     idbr = hl_sum/he_sum*100
@@ -68,22 +68,23 @@ def add_sum(df):
     print(idbr)
 
     #put HL and HE sum in the right format for the table
-    hl_sum = time_formatter(hl_sum)
-    he_sum = time_formatter(he_sum)
+    #hl_sum = time_formatter(hl_sum)
+    #he_sum = time_formatter(he_sum)
 
     #put the data calculated into the original DF
-    df.at[totalammount_row+1, 'HE (h:mm)'] = idbr
-    df.at[totalammount_row+1, 'HL (h:mm)'] = ""
-    df.at[totalammount_row, 'HL (h:mm)'] = hl_sum
-    df.at[totalammount_row, 'HE (h:mm)'] = he_sum
+    df.at[totalammount_row+1, 'HE (h)'] = idbr
+    df.at[totalammount_row+1, 'HL (h)'] = ""
+    df.at[totalammount_row, 'HL (h)'] = hl_sum
+    df.at[totalammount_row, 'HE (h)'] = he_sum
     return df
 
 #FORMAT TIME FROM DAYS/HOURS/MINUTES TO H:MM
 def time_formatter(duration):
     totsec = duration.total_seconds()
-    h = totsec // 3600
-    m = (totsec % 3600) // 60
-    return "%d:%02d" % (h, m)
+    h = totsec / 3600
+    #m = (totsec % 3600) // 60
+    #return "%d:%02d" % (h, m)
+    return "%.2f" % (h)
 
 #TRANSFORM H:MM INTO DAYS/HOURS/MINUTES
 def make_delta(entry):
@@ -98,18 +99,18 @@ def open_file(filename):
 def group_by_operator(df):
     # show only operators and login time
     df = df[['Unnamed: 0', 'Unnamed: 4']]
-    df.columns = ["IND. OP.", "HL (h:mm)"]
+    df.columns = ["IND. OP.", "HL (h)"]
     pd.set_option('display.max_rows', None, 'display.max_columns', None)
     #remove nan
-    df = df[df['HL (h:mm)'].notnull()]
+    df = df[df['HL (h)'].notnull()]
     #remove Horas (HH:MM) line
-    df = df[df['HL (h:mm)'] != "Horas (HH:MM)"]
+    df = df[df['HL (h)'] != "Horas (HH:MM)"]
     #transform STR into datetime
-    df['HL (h:mm)'] = df[['HL (h:mm)']].applymap(lambda entry: make_delta(entry))
+    df['HL (h)'] = df[['HL (h)']].applymap(lambda entry: make_delta(entry))
     # group hours by operator
-    df = df.groupby('IND. OP.')[['HL (h:mm)']].sum()
-    #format date time into hours/min
-    df['HL (h:mm)'] = df[['HL (h:mm)']].applymap(lambda entry: time_formatter(entry))
+    df = df.groupby('IND. OP.')[['HL (h)']].sum()
+    #format date time into hours
+    df['HL (h)'] = df[['HL (h)']].applymap(lambda entry: time_formatter(entry))
     print(df)
     return df
 
@@ -119,7 +120,8 @@ def create_output(df):
     dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
     filepath = f'Relatorio Agrupado {dt_string}.xlsx'
     # Create a Pandas Excel writer using XlsxWriter as the engine.
-    writer = pd.ExcelWriter(filepath, engine='xlsxwriter')
+    writer = pd.ExcelWriter(filepath, engine='xlsxwriter',
+                            engine_kwargs={'options': {'strings_to_numbers': True}})
     # Convert the dataframe to an XlsxWriter Excel object.
     df.to_excel(writer, sheet_name='Sheet1', index=False)
     writer.save()
